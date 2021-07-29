@@ -1,52 +1,38 @@
-#!pip install imgaug
-#!pip install torch_snippets
-#!pip install lxml
-from io import StringIO
+from functools import lru_cache
 import PIL
 from matplotlib import pyplot as plt
 from PIL import Image
-from torch_snippets import show, Glob, np, choose
-import array
-import cv2
-import matplotlib.pyplot as plt
-import matplotlib.image as mpim
+from torch_snippets import show, Glob, np, choose, makedir, parent, unique, stems
 import imgaug as ia
 import imgaug.augmenters as iaa
 from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 from lxml.etree import Element, SubElement, tostring
-import pprint
+from functools import lru_cache
+
 from xml.dom.minidom import parseString
+from lib.connectors.yolo import read_yolo, write_yolo
+
+from torch_snippets.loader import readlines
+
 ia.seed(1)
-yes_checkbox_paths=[""]*2
-no_checkbox_paths=[""]*2
 
-root="C:\\Users\\Hp\\"
-j=0
-all_paths={}
-for i in range(2):
-    yes_checkbox_paths[i] = Glob(f"{root}/dataset1/dataset/YES/*")
-    no_checkbox_paths[i] = Glob(f"{root}/dataset1/dataset/NO/*")
-#yes1_checkbox_paths = Glob(f"{root}/dataset1/dataset/YES/*")
-#no1_checkbox_paths = Glob(f"{root}/dataset1/dataset/NO/*")
+@lru_cache()
+def load_checkbox_image_paths(folder):
+    all_paths = {
+        "ticked": Glob(f"{folder}/YES/*"),
+        "not_ticked": Glob(f"{folder}/NO/*")
+    }
+    return all_paths
 
-    all_paths[i+j]=yes_checkbox_paths[i]
-    all_paths[i+j+1]=no_checkbox_paths[i]
-    
-    
-    j+=1
-
-def patch(image,img1):
+def patch(image, origins, checkbox_image_paths):
+    checkbox_types = list(checkbox_image_paths.keys())
     image = image.copy()
-    bbs = [(14,32), (82,32)]
     classes = []
-    i=0
-    for bb in bbs:
-        clss = choose([0+i,1+i])
-        i+=1
-        i+=1
-        fpath = choose(all_paths[clss])
-        img = Image.open(fpath)
-        image.paste(img, bb)
+    for origin in origins:
+        clss = choose(checkbox_types)
+        fpath = choose(checkbox_image_paths[clss])
+        _chkbx = Image.open(fpath)
+        image.paste(_chkbx, origin)
         classes.append(clss)
     return image, classes
 
@@ -64,11 +50,13 @@ seq = iaa.Sequential([
     ),
 ])
 
-def augment(image, bbs):
-    image = PIL.Image.fromarray(image)
-    image, new_classes = patch(image,image)
+def augment(image, bbs, checkbox_image_paths):
+    image = PIL.Image.fromarray(image) if isinstance(image, np.ndarray) else image
+    origins = [(bb.x1, bb.y1) for bb in bbs]
+    image, new_classes = patch(image, origins, checkbox_image_paths)
     image = np.array(image)
     image_aug, bbs_aug = seq(image=image, bounding_boxes=bbs)
+    # show(image_aug, bbs=[[bb.x1, bb.y1, bb.x2, bb.y2] for bb in bbs_aug])
     H,W = image_aug.shape[:2]
 
     bbs_aug_yolo_format = []
@@ -76,46 +64,49 @@ def augment(image, bbs):
         bb_ = bbs_aug.bounding_boxes[i]
         xmax, xmin = [func(bb_.x1, bb_.x2) for func in (max, min)]
         ymax, ymin = [func(bb_.y1, bb_.y2) for func in (max, min)]
-
         xc = (xmin + xmax)/2.0
         yc = (ymin + ymax)/2.0
         h = xmax-xmin
         w = ymax-ymin
-
         xc = xc/W; yc = yc/H
         h = h/H; w = w/W
         bbs_aug_yolo_format.append((xc,yc,w,h))
     return image_aug, bbs_aug_yolo_format, new_classes
 
-def generate_image_yolo(IMAGE, BBS, filename):
-    new_image, new_bbs, new_classes = augment(IMAGE, BBS)
-    #print(new_classes,new_bbs)
-    file = open("{}.txt".format(filename), 'w')
-    
-    #res=str(new_bbs).strip('[]')
-    for i in range(2):
-        res=""
-        res+=str(new_classes[i])
-        res+=" "
-        for j in range(4):
-            res+=str(new_bbs[i][j])
-            res+=" "
-        file.write(res)
-        file.write('\n')
-    file.close()
-    #'''
-    mybbs = [(xc-w/2,yc-h/2,xc+w/2,yc+h/2) for xc,yc,w,h in new_bbs]
-    #show(new_image, bbs=mybbs)
-    import scipy.misc
-    scipy.misc.imsave('{}.png'.format(filename), new_image)
+import scipy.misc
+def generate_yolo_datum(IMAGE, BBS, filename, checkbox_image_paths):
+    new_image, new_bbs, new_classes = augment(IMAGE, BBS, checkbox_image_paths)
+    try:
+        image_file_name ='{}.png'.format(filename) 
+        makedir(parent(image_file_name))
+        scipy.misc.imsave(image_file_name, new_image)
+    except:
+        import imageio
+        imageio.imwrite('{}.png'.format(filename), new_image)
 
+    with open("{}.txt".format(filename), 'w') as file:
+        for cls, bbs in zip(new_classes, new_bbs):
+            xc,yc,w,h = bbs
+            row = f'{cls} {xc} {yc} {w} {h}\n'
+            file.write(row)
 
-def generate_images_yolo(IMAGE,BBS,folder,n):
+def generate_yolo_data(template_image, template_bbs, folder, n, checkbox_folder):
+    checkbox_image_paths = load_checkbox_image_paths(checkbox_folder)
+    template_bbs = BoundingBoxesOnImage([
+            BoundingBox(x1=x, y1=y, x2=X, y2=Y)
+            for x,y,X,Y in template_bbs
+        ], shape=np.array(template_image).shape
+    )
     for i in range(n):
-        filename=folder+str(i)
-        generate_image_yolo(IMAGE,BBS,filename)
+        filename = f'{folder}/{i}'
+        generate_yolo_datum(template_image, template_bbs, filename, checkbox_image_paths)
 
-
+def inspect_yolo_data(folder):
+    files = unique(stems(folder))
+    for f in files:
+        im_path = f'{folder}/{f}.png'
+        clss, bbs = read_yolo(f'{folder}/{f}.txt', im_path)
+        show(im_path, texts=clss, bbs=bbs)
 
 def patch_icevision(image,img1):
     image = image.copy()
@@ -131,7 +122,6 @@ def patch_icevision(image,img1):
         image.paste(img, bb)
         classes.append(clss)
     return image, classes
-
 
 def augment_icevision(image,pts,bbs):
     image = PIL.Image.fromarray(image)
@@ -231,9 +221,6 @@ def generate_image_icevision(IMAGE, BBS, filename):
         f.write(Xml)
         f.close()
     
-    
-    
-    
     #res=str(new_bbs).strip('[]')
         for i in range(2):
             res=""
@@ -245,12 +232,10 @@ def generate_image_icevision(IMAGE, BBS, filename):
             file.write(res)
             file.write('\n')
         file.close()
-    #'''
     #mybbs = [(xc-w/2,yc-h/2,xc+w/2,yc+h/2) for xc,yc,w,h in new_bbs]
         #show(new_image)
         import scipy.misc
         scipy.misc.imsave('{}.png'.format(filename), new_image)
-
 
 def generate_images_icevision(IMAGE,BBS,folder,n):
     for i in range(n):
