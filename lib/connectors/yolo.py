@@ -14,8 +14,8 @@ def save_record_in_yolo_format(record, filename, mapping):
         ymax, ymin = [func(bb.y, bb.Y) for func in (max, min)]
         xc = (xmin + xmax)/2.0
         yc = (ymin + ymax)/2.0
-        h = xmax-xmin
-        w = ymax-ymin
+        w = xmax-xmin
+        h = ymax-ymin
         xc = xc/W; yc = yc/H
         h = h/H; w = w/W
         lines.append('{} {} {} {} {}'.format(cls,xc,yc,w,h))
@@ -59,7 +59,7 @@ def read_yolo(text_file, image=None):
 def inspect_yolo_data(folder):
     folder = P(folder)
     mapping = readlines(folder/'obj.names')
-    for f in stems(folder/'data'):
+    for f in unique(stems(folder/'data')):
         im = read(f'{folder}/data/{f}.png')
         txt = f'{folder}/data/{f}.txt'
         clss, bbs = read_yolo(txt, im)
