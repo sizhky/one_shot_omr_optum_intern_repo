@@ -45,7 +45,8 @@ def patch(image, bbs, class_names, checkbox_image_paths):
     return image, classes
 
 seq = iaa.Sequential([
-    iaa.Crop(px=(0, 400), keep_size=False), 
+    #iaa.Crop(px=(0, 400), keep_size=False), 
+    iaa.Crop(px=((0, 15),(0,15),(0,15),(0,15))), 
     iaa.GaussianBlur(sigma=(0, 0.5)), 
     iaa.Affine(
         translate_px=(-50, 50),
