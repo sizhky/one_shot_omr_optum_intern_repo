@@ -44,22 +44,9 @@ def patch(image, bbs, class_names, checkbox_image_paths):
         classes.append(f'{class_name}_{clss}')
     return image, classes
 
-seq = iaa.Sequential([
-    #iaa.Crop(px=(0, 400), keep_size=False), 
-    iaa.Crop(px=((0, 15),(0,15),(0,15),(0,15))), 
-    iaa.GaussianBlur(sigma=(0, 0.5)), 
-    iaa.Affine(
-        translate_px=(-50, 50),
-        scale=(0.95, 1.05),
-        rotate=(-2,2),
-        cval=(255,255),
-        fit_output=False
-    ),
-    iaa.Multiply((0.8, 1.2)), # change brightness, doesn't affect BBs
-])
 
 from copy import deepcopy
-def augment(image, bbs, class_names, checkbox_image_paths, tolerance=15):
+def augment(image, bbs, class_names, seq, checkbox_image_paths, tolerance=15):
     image = PIL.Image.fromarray(image).copy() if isinstance(image, np.ndarray) else image.copy()
     image, new_classes = patch(image, bbs, class_names, checkbox_image_paths)
     image = np.array(image)
@@ -81,15 +68,15 @@ def augment(image, bbs, class_names, checkbox_image_paths, tolerance=15):
             CLSS.remove(cls)
     return image_aug, BBS, CLSS
  
-def generate_datum(IMAGE, BBS, class_names, checkbox_image_paths):
-    new_image, new_bbs, new_classes = augment(IMAGE, BBS, class_names, checkbox_image_paths)
+def generate_datum(IMAGE, BBS, class_names, seq, checkbox_image_paths):
+    new_image, new_bbs, new_classes = augment(IMAGE, BBS, class_names, seq, checkbox_image_paths)
     return new_image, new_bbs, new_classes
 
-def generate_data(template_image, template_bbs, class_names, n, checkbox_folder):
+def generate_data(template_image, template_bbs, class_names, n, seq, checkbox_folder):
     checkbox_image_paths = load_checkbox_image_paths(checkbox_folder)
     records = []
     for _ in range(n):
-        records.append(generate_datum(template_image.copy(), template_bbs, class_names, checkbox_image_paths))
+        records.append(generate_datum(template_image.copy(), template_bbs, class_names, seq, checkbox_image_paths))
     return records
 
 def inspect_records(records):
