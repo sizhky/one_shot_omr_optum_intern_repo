@@ -46,7 +46,7 @@ def patch(image, bbs, class_names, checkbox_image_paths):
 
 
 from copy import deepcopy
-def augment(image, bbs, class_names,seq, checkbox_image_paths, tolerance=15):
+def augment(image, bbs, class_names, seq, checkbox_image_paths, tolerance=15):
     image = PIL.Image.fromarray(image).copy() if isinstance(image, np.ndarray) else image.copy()
     image, new_classes = patch(image, bbs, class_names, checkbox_image_paths)
     image = np.array(image)
@@ -68,15 +68,15 @@ def augment(image, bbs, class_names,seq, checkbox_image_paths, tolerance=15):
             CLSS.remove(cls)
     return image_aug, BBS, CLSS
  
-def generate_datum(IMAGE, BBS, class_names,seq, checkbox_image_paths):
-    new_image, new_bbs, new_classes = augment(IMAGE, BBS, class_names,seq, checkbox_image_paths)
+def generate_datum(IMAGE, BBS, class_names, seq, checkbox_image_paths):
+    new_image, new_bbs, new_classes = augment(IMAGE, BBS, class_names, seq, checkbox_image_paths)
     return new_image, new_bbs, new_classes
 
 def generate_data(template_image, template_bbs, class_names, n, seq, checkbox_folder):
     checkbox_image_paths = load_checkbox_image_paths(checkbox_folder)
     records = []
     for _ in range(n):
-        records.append(generate_datum(template_image.copy(), template_bbs, class_names,seq, checkbox_image_paths))
+        records.append(generate_datum(template_image.copy(), template_bbs, class_names, seq, checkbox_image_paths))
     return records
 
 def inspect_records(records):
