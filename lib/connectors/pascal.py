@@ -75,8 +75,8 @@ def generate_pascal_datum(image, bbs, classes, image_path, xml_path):
 
         cv2.imwrite(image_path, image)
 
-def generate_data_in_pascal_format(template_image, template_bbs, class_names, n, checkbox_folder, output_folder):
-    records = generate_data(template_image, template_bbs, class_names, n, checkbox_folder)
+def generate_data_in_pascal_format(template_image, template_bbs, class_names, n,seq, checkbox_folder, output_folder):
+    records = generate_data(template_image, template_bbs, class_names, n,seq, checkbox_folder)
     for ix, record in enumerate(records):
         im, bbs, clss = record
         image_path = f'{output_folder}/images/{ix}.png'
